@@ -100,6 +100,7 @@ export default function Dashboard() {
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState("All");
 
   const user = JSON.parse(localStorage.getItem("user"));
   const firstName = user?.name?.split(" ")[0] || "Student";
@@ -139,6 +140,132 @@ export default function Dashboard() {
   );
 
   const activeSession = chatSessions.find((session) => session._id === activeSessionId);
+
+  const allSessions = chatSessions.length ? chatSessions : sessions;
+
+  const subjectOptions = useMemo(() => {
+    const subjects = Array.from(
+      new Set(allSessions.map((session) => session.subject || "General"))
+    );
+
+    return ["All", ...subjects];
+  }, [allSessions]);
+
+  const filteredSessions = useMemo(() => {
+    if (subjectFilter === "All") {
+      return allSessions;
+    }
+
+    return allSessions.filter(
+      (session) => (session.subject || "General") === subjectFilter
+    );
+  }, [allSessions, subjectFilter]);
+
+  const flashcards = useMemo(() => {
+    const subject = activeSession?.subject || "General";
+    const bank = {
+      Calculus: [
+        {
+          question: "What is a limit?",
+          answer:
+            "A limit describes the value a function approaches as the input gets closer to a point.",
+        },
+        {
+          question: "What does derivative represent?",
+          answer:
+            "The derivative measures how fast a function changes relative to its input.",
+        },
+        {
+          question: "What is a tangent line?",
+          answer:
+            "A tangent line touches a curve at one point and has the same slope as the curve there.",
+        },
+      ],
+      Physics: [
+        {
+          question: "What is Newton's first law?",
+          answer:
+            "An object stays at rest or moves at constant speed unless acted on by an unbalanced force.",
+        },
+        {
+          question: "What is velocity?",
+          answer: "Velocity is speed with a direction attached.",
+        },
+        {
+          question: "What is energy?",
+          answer:
+            "Energy is the ability to do work, stored in motion, position, or fields.",
+        },
+      ],
+      Biology: [
+        {
+          question: "What is photosynthesis?",
+          answer:
+            "Photosynthesis is how plants turn sunlight, water and CO₂ into food and oxygen.",
+        },
+        {
+          question: "What is a cell?",
+          answer:
+            "A cell is the basic building block of living organisms.",
+        },
+        {
+          question: "What is DNA?",
+          answer: "DNA carries genetic instructions for growth and reproduction.",
+        },
+      ],
+      Writing: [
+        {
+          question: "What makes a strong thesis statement?",
+          answer:
+            "A strong thesis clearly states the main idea and what the essay will prove.",
+        },
+        {
+          question: "Why is structure important?",
+          answer:
+            "Structure helps the reader follow your argument and keeps the writing clear.",
+        },
+        {
+          question: "What is a supporting example?",
+          answer:
+            "A supporting example gives evidence that backs up your main point.",
+        },
+      ],
+      Languages: [
+        {
+          question: "What is code-switching?",
+          answer:
+            "Code-switching means switching between languages or dialects in the same conversation.",
+        },
+        {
+          question: "What is a common Kiswahili greeting?",
+          answer: "A common Kiswahili greeting is 'Habari' or 'Hujambo'.",
+        },
+        {
+          question: "What does 'shine' mean in Sheng?",
+          answer: "In Sheng, 'shine' can mean something is impressive or very good.",
+        },
+      ],
+      General: [
+        {
+          question: "What is active learning?",
+          answer:
+            "Active learning means asking questions, practicing, and explaining concepts in your own words.",
+        },
+        {
+          question: "How can you improve memory?",
+          answer:
+            "Practice regularly, review notes, and use examples to make ideas stick.",
+        },
+        {
+          question: "Why schedule short study sessions?",
+          answer:
+            "Short, frequent review sessions help the brain retain information better than long cramming.",
+        },
+      ],
+    };
+
+    return bank[subject] || bank.General;
+  }, [activeSession]);
 
   const loadSessions = async () => {
     const { data } = await api.get("/chat/sessions");
@@ -275,6 +402,32 @@ export default function Dashboard() {
           })}
         </nav>
 
+        <div className="dashboard-subjects">
+          <h3>My subjects</h3>
+          <div className="subject-list">
+            {subjectOptions.map((subject) => (
+              <button
+                key={subject}
+                type="button"
+                className={`subject-pill ${subjectFilter === subject ? "active" : ""}`}
+                onClick={() => {
+                  setSubjectFilter(subject);
+                  if (subject !== "All") {
+                    const nextSession = allSessions.find(
+                      (session) => (session.subject || "General") === subject
+                    );
+                    if (nextSession) {
+                      openSession(nextSession);
+                    }
+                  }
+                }}
+              >
+                {subject}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <button type="button" className="dashboard-logout" onClick={logout}>
           <FiLogOut />
           <span>Logout</span>
@@ -325,42 +478,48 @@ export default function Dashboard() {
             <div className="dashboard-panel-header">
               <h2>Your sessions</h2>
               <div className="session-tabs">
-                <button type="button" className="active">All</button>
+                <button type="button" className={subjectFilter === "All" ? "active" : ""}>All</button>
                 <button type="button">Upcoming</button>
                 <button type="button">Completed</button>
               </div>
             </div>
 
             <div className="session-list">
-              {sessions.map((session) => {
-                const Icon = session.icon;
+              {filteredSessions.map((session) => {
+                const Icon = session.icon || FiBookOpen;
+                const sessionStatus = session.status || "Active";
+                const sessionTone = session.tone || "purple";
+                const sessionDate = session.date ||
+                  (session.updatedAt ? new Date(session.updatedAt).toLocaleDateString() : "Today");
+                const sessionDuration = session.duration || "30 min";
+                const sessionProgress = session.progress ?? Math.min(100, (session.messages?.length ?? 1) * 12 + 10);
 
                 return (
-                  <div className="session-row" key={session.title}>
-                    <div className={`session-icon ${session.tone}`}>
+                  <div className="session-row" key={session._id || session.title}>
+                    <div className={`session-icon ${sessionTone}`}>
                       <Icon />
                     </div>
 
                     <div className="session-info">
                       <h3>
-                        {session.title}
-                        <span className={`session-status ${session.status.toLowerCase()}`}>
-                          {session.status}
+                        {session.title || `Study ${session.subject || "General"}`}
+                        <span className={`session-status ${sessionStatus.toLowerCase()}`}>
+                          {sessionStatus}
                         </span>
                       </h3>
                       <p>
-                        <span>{session.subject}</span>
+                        <span>{session.subject || "General"}</span>
                         <FiCalendar />
-                        <span>{session.date}</span>
+                        <span>{sessionDate}</span>
                         <FiClock />
-                        <span>{session.duration}</span>
+                        <span>{sessionDuration}</span>
                       </p>
                       <div className="session-progress">
-                        <span style={{ width: `${session.progress}%` }}></span>
+                        <span style={{ width: `${sessionProgress}%` }}></span>
                       </div>
                     </div>
 
-                    <button type="button" className="session-play">
+                    <button type="button" className="session-play" onClick={() => openSession(session)}>
                       <FiArrowRight />
                     </button>
                   </div>
@@ -374,38 +533,58 @@ export default function Dashboard() {
             </button>
           </article>
 
-          <article className="dashboard-panel history-panel">
-            <div className="dashboard-panel-header">
-              <h2>Chat history</h2>
-              <button type="button">See all</button>
-            </div>
+          <div className="dashboard-right-column">
+            <article className="dashboard-panel history-panel">
+              <div className="dashboard-panel-header">
+                <h2>Chat history</h2>
+                <button type="button">See all</button>
+              </div>
 
-            <div className="chat-history-list">
-              {chatHistory.length === 0 ? (
-                <div className="chat-history-empty">
-                  Your Claude tutor chats will appear here.
-                </div>
-              ) : (
-                chatHistory.map((chat) => (
-                  <button
-                    type="button"
-                    className={`chat-history-item ${chat.id === activeSessionId ? "active" : ""}`}
-                    key={chat.id}
-                    onClick={() => openSession(chat.session)}
-                  >
-                    <span className={`chat-history-icon ${chat.tone}`}>
-                      <FiMessageCircle />
-                    </span>
-                    <span>
-                      <strong>{chat.title}</strong>
-                      <small>{chat.preview}</small>
-                    </span>
-                    <time>{chat.time}</time>
-                  </button>
-                ))
-              )}
-            </div>
-          </article>
+              <div className="chat-history-list">
+                {chatHistory.length === 0 ? (
+                  <div className="chat-history-empty">
+                    Your Claude tutor chats will appear here.
+                  </div>
+                ) : (
+                  chatHistory.map((chat) => (
+                    <button
+                      type="button"
+                      className={`chat-history-item ${chat.id === activeSessionId ? "active" : ""}`}
+                      key={chat.id}
+                      onClick={() => openSession(chat.session)}
+                    >
+                      <span className={`chat-history-icon ${chat.tone}`}>
+                        <FiMessageCircle />
+                      </span>
+                      <span>
+                        <strong>{chat.title}</strong>
+                        <small>{chat.preview}</small>
+                      </span>
+                      <time>{chat.time}</time>
+                    </button>
+                  ))
+                )}
+              </div>
+            </article>
+
+            <article className="dashboard-panel flashcards-panel">
+              <div className="dashboard-panel-header">
+                <h2>AI Flashcards</h2>
+              </div>
+              <p className="flashcards-description">
+                Review quick AI-generated study cards for {activeSession?.subject || "your current subject"}.
+              </p>
+
+              <div className="flashcard-grid">
+                {flashcards.map((card, index) => (
+                  <div className="flashcard" key={`${card.question}-${index}`}>
+                    <h3>{card.question}</h3>
+                    <p>{card.answer}</p>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </div>
         </section>
 
         <section className="dashboard-panel chatbox-panel">
