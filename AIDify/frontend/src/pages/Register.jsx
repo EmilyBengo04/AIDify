@@ -28,11 +28,12 @@ export default function Register() {
   const registerUser = async (e) => {
     e.preventDefault();
 
-    try {
-      const res = await axios.post(
-        "http://localhost:5000/api/auth/register",
-        form
-      );
+      try {
+        const API_URL = import.meta.env.VITE_API_URL;
+        const res = await axios.post(
+          `${API_URL}/auth/register`,
+          form
+        );
 
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
