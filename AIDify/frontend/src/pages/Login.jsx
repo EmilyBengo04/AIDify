@@ -1,6 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { FaApple, FaGoogle } from "react-icons/fa";
 import {
   FiEyeOff,
@@ -10,6 +10,7 @@ import {
 } from "react-icons/fi";
 
 export default function Login() {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -26,26 +27,24 @@ export default function Login() {
     e.preventDefault();
 
     try {
-          const API_URL = import.meta.env.VITE_API_URL;
-          const res = await axios.post(
-            `${API_URL}/auth/login`,
-            form
+      const API_URL = import.meta.env.VITE_API_URL;
+
+      if (!API_URL) {
+        throw new Error("VITE_API_URL is not defined.");
+      }
+
+      const res = await axios.post(
+        `${API_URL}/auth/login`,
+        form
       );
 
-      localStorage.setItem(
-        "token",
-        res.data.token
-      );
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("user", JSON.stringify(res.data.user));
 
-      localStorage.setItem(
-        "user",
-        JSON.stringify(res.data.user)
-      );
-
-      window.location.href = "/dashboard";
-
+      navigate("/dashboard");
     } catch (err) {
-      alert(err.response?.data?.message);
+      console.error(err);
+      alert(err.response?.data?.message || err.message || "Login failed.");
     }
   };
 
@@ -128,6 +127,7 @@ export default function Login() {
                   type="email"
                   placeholder="Enter your email"
                   name="email"
+                  value={form.email}
                   onChange={handleChange}
                 />
               </div>
@@ -141,6 +141,7 @@ export default function Login() {
                   type="password"
                   placeholder="Enter your password"
                   name="password"
+                  value={form.password}
                   onChange={handleChange}
                 />
                 <FiEyeOff />
