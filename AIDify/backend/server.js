@@ -4,7 +4,7 @@ import cors from 'cors';
 import connectDB from './config/db.js';
 import authRoutes from "./routes/authRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
-
+import analyticsRoutes from "./routes/analyticsRoutes.js";
 
 dotenv.config();
 
@@ -17,7 +17,7 @@ app.use(express.json());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
-
+app.use('/api/analytics', analyticsRoutes);
 app.get('/', (req, res) => {
   res.send('AIDify API Running');
 });

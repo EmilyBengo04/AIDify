@@ -2,6 +2,7 @@ import express from "express";
 import axios from "axios";
 import ChatSession from "../models/ChatSession.js";
 import protect from "../middleware/authMiddleware.js";
+import Analytics from "../models/Analytics.js";
 
 const router = express.Router();
 
@@ -191,6 +192,40 @@ const assistantReply =
       role: "assistant",
       content: assistantReply,
     });
+
+    let analytics = await Analytics.findOne({
+  user: req.user._id,
+});
+
+if (!analytics) {
+  analytics = await Analytics.create({
+    user: req.user._id,
+  });
+}
+
+analytics.totalChats += 1;
+
+analytics.subjectStats.set(
+  session.subject,
+  (analytics.subjectStats.get(session.subject) || 0) + 1
+);
+
+analytics.masteryScore = Math.min(
+  100,
+  analytics.totalChats * 2
+);
+
+const subjects = [...analytics.subjectStats.entries()];
+
+subjects.sort((a, b) => b[1] - a[1]);
+
+if (subjects.length > 0) {
+  analytics.strongestSubject = subjects[0][0];
+  analytics.weakestSubject =
+    subjects[subjects.length - 1][0];
+}
+
+await analytics.save();
 
     session.learningTrack.summary = `Last worked on ${session.subject}. Recent focus: ${message.trim().slice(0, 120)}`;
 

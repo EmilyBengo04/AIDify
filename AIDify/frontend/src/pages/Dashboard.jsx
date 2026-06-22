@@ -18,6 +18,7 @@ import {
 } from "react-icons/fi";
 import { GiChemicalDrop } from "react-icons/gi";
 import api from "../services/api";
+import AnalyticsCards from "../components/AnalyticsCards";
 
 const sessions = [
   {
@@ -586,6 +587,8 @@ export default function Dashboard() {
             </article>
           </div>
         </section>
+
+        <AnalyticsCards />
 
         <section className="dashboard-panel chatbox-panel">
           <div className="dashboard-panel-header">
