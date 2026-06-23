@@ -194,38 +194,67 @@ const assistantReply =
     });
 
     let analytics = await Analytics.findOne({
-  user: req.user._id,
-});
+      user: req.user._id,
+    });
 
-if (!analytics) {
-  analytics = await Analytics.create({
-    user: req.user._id,
-  });
-}
+    if (!analytics) {
+      analytics = await Analytics.create({
+        user: req.user._id,
+      });
+    }
 
-analytics.totalChats += 1;
+    const today = new Date();
 
-analytics.subjectStats.set(
-  session.subject,
-  (analytics.subjectStats.get(session.subject) || 0) + 1
-);
+    if (!analytics.lastActiveDate) {
+      analytics.streak = 1;
+    } else {
+      const diffDays = Math.floor(
+        (today - analytics.lastActiveDate) /
+          (1000 * 60 * 60 * 24)
+      );
 
-analytics.masteryScore = Math.min(
-  100,
-  analytics.totalChats * 2
-);
+      if (diffDays === 1) {
+        analytics.streak += 1;
+      } else if (diffDays > 1) {
+        analytics.streak = 1;
+      }
+    }
 
-const subjects = [...analytics.subjectStats.entries()];
+    analytics.lastActiveDate = today;
+    analytics.totalChats += 1;
 
-subjects.sort((a, b) => b[1] - a[1]);
+    analytics.totalSessions =
+      await ChatSession.countDocuments({
+        user: req.user._id,
+      });
 
-if (subjects.length > 0) {
-  analytics.strongestSubject = subjects[0][0];
-  analytics.weakestSubject =
-    subjects[subjects.length - 1][0];
-}
+    analytics.masteryScore = Math.min(
+      100,
+      analytics.totalChats * 2
+    );
 
-await analytics.save();
+    const currentSubject = session.subject;
+
+    analytics.subjectStats.set(
+      currentSubject,
+      (analytics.subjectStats.get(currentSubject) || 0) + 1
+    );
+
+    const sortedSubjects = [
+      ...analytics.subjectStats.entries(),
+    ].sort((a, b) => b[1] - a[1]);
+
+    if (sortedSubjects.length > 0) {
+      analytics.strongestSubject =
+        sortedSubjects[0][0];
+
+      analytics.weakestSubject =
+        sortedSubjects[
+          sortedSubjects.length - 1
+        ][0];
+    }
+
+    await analytics.save();
 
     session.learningTrack.summary = `Last worked on ${session.subject}. Recent focus: ${message.trim().slice(0, 120)}`;
 

@@ -98,13 +98,21 @@ export default function Dashboard() {
   const [chatSessions, setChatSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [activeMessages, setActiveMessages] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [liveInsights, setLiveInsights] = useState(null);
+  const [flippedCards, setFlippedCards] = useState({});
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [chatError, setChatError] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("All");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [theme, setTheme] = useState(
+    localStorage.getItem("aidifyTheme") || "light"
+  );
 
   const user = JSON.parse(localStorage.getItem("user"));
   const firstName = user?.name?.split(" ")[0] || "Student";
+  const darkMode = theme === "dark";
 
   const stats = useMemo(
     () => [
@@ -141,6 +149,48 @@ export default function Dashboard() {
   );
 
   const activeSession = chatSessions.find((session) => session._id === activeSessionId);
+
+  const subjectPerformance = useMemo(() => {
+    if (!analytics?.subjectStats?.length) return [];
+
+    const entries = [...analytics.subjectStats]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 4);
+
+    const maxCount = Math.max(...entries.map((item) => item.count), 1);
+
+    return entries.map((item) => ({
+      subject: item.subject,
+      value: Math.round((item.count / maxCount) * 100),
+    }));
+  }, [analytics]);
+
+  const insights = useMemo(() => {
+    if (liveInsights) {
+      return liveInsights;
+    }
+
+    const strongest =
+      analytics?.strongestSubject || activeSession?.subject || "Languages";
+    const weakest = analytics?.weakestSubject || "Physics";
+    const recent =
+      activeSession?.subject || analytics?.subjectStats?.[0]?.subject || "Machine Learning";
+    const nextBySubject = {
+      Physics: "Introduction to Newton's Laws",
+      Calculus: "Practice limits with real examples",
+      Biology: "Review cell structure",
+      Languages: "Practice code-switching examples",
+      Writing: "Draft a thesis statement",
+      General: "Introduction to Neural Networks",
+    };
+
+    return {
+      strongest,
+      weakest,
+      recent,
+      next: nextBySubject[recent] || "Introduction to Neural Networks",
+    };
+  }, [analytics, activeSession, liveInsights]);
 
   const allSessions = chatSessions.length ? chatSessions : sessions;
 
@@ -282,6 +332,29 @@ export default function Dashboard() {
     }
   };
 
+  const loadAnalytics = async () => {
+    const { data } = await api.get("/analytics");
+    setAnalytics(data);
+  };
+
+  const loadInsights = async (sessionId) => {
+    try {
+      const { data } = await api.get("/analytics/insights", {
+        params: sessionId ? { sessionId } : {},
+      });
+      setLiveInsights(data.insights);
+    } catch (error) {
+      setLiveInsights(null);
+    }
+  };
+
+  const toggleFlashcard = (index) => {
+    setFlippedCards((prev) => ({
+      ...prev,
+      [index]: !prev[index],
+    }));
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("token");
 
@@ -291,13 +364,26 @@ export default function Dashboard() {
     }
 
     setIsLoadingChat(true);
-    loadSessions()
+
+    Promise.all([loadSessions(), loadAnalytics()])
       .catch((error) => {
-        setChatError(error.response?.data?.message || "Could not load your chat history.");
+        setChatError(
+          error.response?.data?.message || "Could not load your learning data."
+        );
         setActiveMessages(fallbackMessages(firstName));
       })
       .finally(() => setIsLoadingChat(false));
   }, []);
+
+  useEffect(() => {
+    if (activeSessionId !== null) {
+      loadInsights(activeSessionId);
+    }
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    localStorage.setItem("aidifyTheme", theme);
+  }, [theme]);
 
   const logout = () => {
     localStorage.removeItem("token");
@@ -380,7 +466,7 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="dashboard-page">
+    <div className={`dashboard-page ${darkMode ? "dark" : ""}`}>
       <aside className="dashboard-sidebar">
         <Link to="/" className="dashboard-logo">
           AIDIFY
@@ -427,6 +513,25 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
+
+          <div className="subject-performance-panel">
+            <h4>Subject performance</h4>
+            {subjectPerformance.length === 0 ? (
+              <p className="subject-performance-empty">
+                Complete more chats to unlock performance insights.
+              </p>
+            ) : (
+              subjectPerformance.map((subject) => (
+                <div key={subject.subject} className="performance-row">
+                  <span>{subject.subject}</span>
+                  <div className="performance-bar">
+                    <span className="performance-fill" style={{ width: `${subject.value}%` }} />
+                  </div>
+                  <strong>{subject.value}%</strong>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         <button type="button" className="dashboard-logout" onClick={logout}>
@@ -447,6 +552,43 @@ export default function Dashboard() {
               <FiSearch />
               <input type="search" placeholder="Search sessions, chats..." />
             </label>
+
+            <div className="dashboard-header-controls">
+              <button
+                type="button"
+                className={`theme-toggle ${theme === "light" ? "active" : ""}`}
+                onClick={() => setTheme("light")}
+              >
+                ☀️ Light
+              </button>
+              <button
+                type="button"
+                className={`theme-toggle ${theme === "dark" ? "active" : ""}`}
+                onClick={() => setTheme("dark")}
+              >
+                🌙 Dark
+              </button>
+
+              <div className="profile-menu">
+                <button
+                  type="button"
+                  className="profile-toggle"
+                  onClick={() => setProfileOpen((open) => !open)}
+                >
+                  👤 {firstName}
+                </button>
+                {profileOpen && (
+                  <div className="profile-dropdown">
+                    <button type="button">Profile</button>
+                    <button type="button">Learning Goals</button>
+                    <button type="button">Settings</button>
+                    <button type="button" onClick={logout}>
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
 
             <button type="button" className="new-session-btn" onClick={startNewSession}>
               <FiPlus />
@@ -502,18 +644,12 @@ export default function Dashboard() {
                     </div>
 
                     <div className="session-info">
-                      <h3>
-                        {session.title || `Study ${session.subject || "General"}`}
-                        <span className={`session-status ${sessionStatus.toLowerCase()}`}>
-                          {sessionStatus}
-                        </span>
-                      </h3>
-                      <p>
-                        <span>{session.subject || "General"}</span>
-                        <FiCalendar />
-                        <span>{sessionDate}</span>
-                        <FiClock />
-                        <span>{sessionDuration}</span>
+                      <p className="session-subject-pill">
+                        {session.subject === "Physics" ? "⚛️" : "📘"} {session.subject || "General"}
+                      </p>
+                      <h3>{session.title || `Study ${session.subject || "General"}`}</h3>
+                      <p className="session-meta">
+                        Progress: {sessionProgress}% · Last active: {session.updatedAt ? getRelativeTime(session.updatedAt) : session.date}
                       </p>
                       <div className="session-progress">
                         <span style={{ width: `${sessionProgress}%` }}></span>
@@ -568,6 +704,30 @@ export default function Dashboard() {
               </div>
             </article>
 
+            <article className="dashboard-panel insights-panel">
+              <div className="dashboard-panel-header">
+                <h2>🧠 Learning insights</h2>
+              </div>
+              <div className="insights-grid">
+                <div className="insight-item">
+                  <span>Strongest Subject</span>
+                  <strong>{insights.strongest}</strong>
+                </div>
+                <div className="insight-item">
+                  <span>Needs More Practice</span>
+                  <strong>{insights.weakest}</strong>
+                </div>
+                <div className="insight-item">
+                  <span>Recent Topic</span>
+                  <strong>{insights.recent}</strong>
+                </div>
+                <div className="insight-item">
+                  <span>Recommended Next</span>
+                  <strong>{insights.next}</strong>
+                </div>
+              </div>
+            </article>
+
             <article className="dashboard-panel flashcards-panel">
               <div className="dashboard-panel-header">
                 <h2>AI Flashcards</h2>
@@ -578,17 +738,28 @@ export default function Dashboard() {
 
               <div className="flashcard-grid">
                 {flashcards.map((card, index) => (
-                  <div className="flashcard" key={`${card.question}-${index}`}>
-                    <h3>{card.question}</h3>
-                    <p>{card.answer}</p>
-                  </div>
+                  <button
+                    type="button"
+                    className={`flashcard ${flippedCards[index] ? "flipped" : ""}`}
+                    key={`${card.question}-${index}`}
+                    onClick={() => toggleFlashcard(index)}
+                  >
+                    <div className="flashcard-inner">
+                      <div className="flashcard-face flashcard-front">
+                        <h3>{card.question}</h3>
+                      </div>
+                      <div className="flashcard-face flashcard-back">
+                        <p>{card.answer}</p>
+                      </div>
+                    </div>
+                  </button>
                 ))}
               </div>
             </article>
           </div>
         </section>
 
-        <AnalyticsCards />
+        <AnalyticsCards analytics={analytics} />
 
         <section className="dashboard-panel chatbox-panel">
           <div className="dashboard-panel-header">
@@ -607,13 +778,18 @@ export default function Dashboard() {
 
           <div className="chatbox-messages">
             {isLoadingChat ? (
-              <div className="chat-message ai">
+              <div className="chat-message ai-message">
                 <span>A</span>
                 <p>Loading your learning history...</p>
               </div>
             ) : (
               activeMessages.map((chatMessage, index) => (
-                <div className={`chat-message ${chatMessage.role === "user" ? "user" : "ai"}`} key={`${chatMessage.role}-${index}`}>
+                <div
+                  className={`chat-message ${
+                    chatMessage.role === "user" ? "user-message" : "ai-message"
+                  }`}
+                  key={`${chatMessage.role}-${index}`}
+                >
                   {chatMessage.role !== "user" && <span>A</span>}
                   <p>{chatMessage.content}</p>
                   {chatMessage.role === "user" && (
@@ -624,9 +800,16 @@ export default function Dashboard() {
             )}
 
             {isSending && (
-              <div className="chat-message ai">
+              <div className="chat-message ai-message typing-message">
                 <span>A</span>
-                <p>Claude is preparing your next step...</p>
+                <p>
+                  AIDify is thinking
+                  <span className="typing-dots">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                </p>
               </div>
             )}
           </div>

@@ -21,7 +21,11 @@ const analyticsSchema = new mongoose.Schema(
 
     streak: {
       type: Number,
-      default: 0,
+      default: 1,
+    },
+
+    lastActiveDate: {
+      type: Date,
     },
 
     masteryScore: {
