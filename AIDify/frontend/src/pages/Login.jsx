@@ -1,6 +1,6 @@
 import { useState } from "react";
-import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
+import api from "../services/api";
 import { FaApple, FaGoogle } from "react-icons/fa";
 import {
   FiEyeOff,
@@ -27,16 +27,7 @@ export default function Login() {
     e.preventDefault();
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL;
-
-      if (!API_URL) {
-        throw new Error("VITE_API_URL is not defined.");
-      }
-
-      const res = await axios.post(
-        `${API_URL}/auth/login`,
-        form
-      );
+      const res = await api.post("/auth/login", form);
 
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
