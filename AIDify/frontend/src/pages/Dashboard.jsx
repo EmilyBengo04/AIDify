@@ -100,6 +100,8 @@ export default function Dashboard() {
   const [activeMessages, setActiveMessages] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [liveInsights, setLiveInsights] = useState(null);
+  const [flashcards, setFlashcards] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
   const [flippedCards, setFlippedCards] = useState({});
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -118,34 +120,37 @@ export default function Dashboard() {
     () => [
       {
         label: "Learning streak",
-        value: String(user?.streak ?? 0),
+        value: String(analytics?.streak ?? user?.streak ?? 0),
         suffix: "days",
         icon: FiTrendingUp,
         tone: "pink",
       },
       {
-        label: "Sessions this week",
-        value: String(chatSessions.length),
-        suffix: "/10",
+        label: "Sessions tracked",
+        value: String(analytics?.totalSessions ?? chatSessions.length),
+        suffix: "sessions",
         icon: FiTarget,
         tone: "purple",
       },
       {
-        label: "Total chat hours",
-        value: String(Math.max(0, Math.ceil(chatSessions.length * 0.5))),
-        suffix: "hrs",
+        label: "Total chats",
+        value: String(
+          analytics?.totalChats ??
+            chatSessions.reduce((total, session) => total + (session.messages?.length || 0), 0)
+        ),
+        suffix: "chats",
         icon: FiMessageCircle,
         tone: "cyan",
       },
       {
         label: "Mastery score",
-        value: String(user?.masteryScore ?? 0),
+        value: String(analytics?.masteryScore ?? user?.masteryScore ?? 0),
         suffix: "%",
         icon: FiBarChart2,
         tone: "green",
       },
     ],
-    [chatSessions.length, user?.masteryScore, user?.streak]
+    [analytics, chatSessions, user?.masteryScore, user?.streak]
   );
 
   const activeSession = chatSessions.find((session) => session._id === activeSessionId);
@@ -164,6 +169,15 @@ export default function Dashboard() {
       value: Math.round((item.count / maxCount) * 100),
     }));
   }, [analytics]);
+
+  const recentTopics = useMemo(() => {
+    const topics = [
+      ...chatSessions.map((session) => session.subject || "General"),
+      ...(analytics?.subjectStats || []).map((item) => item.subject),
+    ].filter(Boolean);
+
+    return [...new Set(topics)].slice(0, 6);
+  }, [analytics, chatSessions]);
 
   const insights = useMemo(() => {
     if (liveInsights) {
@@ -212,112 +226,6 @@ export default function Dashboard() {
     );
   }, [allSessions, subjectFilter]);
 
-  const flashcards = useMemo(() => {
-    const subject = activeSession?.subject || "General";
-    const bank = {
-      Calculus: [
-        {
-          question: "What is a limit?",
-          answer:
-            "A limit describes the value a function approaches as the input gets closer to a point.",
-        },
-        {
-          question: "What does derivative represent?",
-          answer:
-            "The derivative measures how fast a function changes relative to its input.",
-        },
-        {
-          question: "What is a tangent line?",
-          answer:
-            "A tangent line touches a curve at one point and has the same slope as the curve there.",
-        },
-      ],
-      Physics: [
-        {
-          question: "What is Newton's first law?",
-          answer:
-            "An object stays at rest or moves at constant speed unless acted on by an unbalanced force.",
-        },
-        {
-          question: "What is velocity?",
-          answer: "Velocity is speed with a direction attached.",
-        },
-        {
-          question: "What is energy?",
-          answer:
-            "Energy is the ability to do work, stored in motion, position, or fields.",
-        },
-      ],
-      Biology: [
-        {
-          question: "What is photosynthesis?",
-          answer:
-            "Photosynthesis is how plants turn sunlight, water and CO₂ into food and oxygen.",
-        },
-        {
-          question: "What is a cell?",
-          answer:
-            "A cell is the basic building block of living organisms.",
-        },
-        {
-          question: "What is DNA?",
-          answer: "DNA carries genetic instructions for growth and reproduction.",
-        },
-      ],
-      Writing: [
-        {
-          question: "What makes a strong thesis statement?",
-          answer:
-            "A strong thesis clearly states the main idea and what the essay will prove.",
-        },
-        {
-          question: "Why is structure important?",
-          answer:
-            "Structure helps the reader follow your argument and keeps the writing clear.",
-        },
-        {
-          question: "What is a supporting example?",
-          answer:
-            "A supporting example gives evidence that backs up your main point.",
-        },
-      ],
-      Languages: [
-        {
-          question: "What is code-switching?",
-          answer:
-            "Code-switching means switching between languages or dialects in the same conversation.",
-        },
-        {
-          question: "What is a common Kiswahili greeting?",
-          answer: "A common Kiswahili greeting is 'Habari' or 'Hujambo'.",
-        },
-        {
-          question: "What does 'shine' mean in Sheng?",
-          answer: "In Sheng, 'shine' can mean something is impressive or very good.",
-        },
-      ],
-      General: [
-        {
-          question: "What is active learning?",
-          answer:
-            "Active learning means asking questions, practicing, and explaining concepts in your own words.",
-        },
-        {
-          question: "How can you improve memory?",
-          answer:
-            "Practice regularly, review notes, and use examples to make ideas stick.",
-        },
-        {
-          question: "Why schedule short study sessions?",
-          answer:
-            "Short, frequent review sessions help the brain retain information better than long cramming.",
-        },
-      ],
-    };
-
-    return bank[subject] || bank.General;
-  }, [activeSession]);
-
   const loadSessions = async () => {
     const { data } = await api.get("/chat/sessions");
     setChatSessions(data.sessions);
@@ -335,6 +243,24 @@ export default function Dashboard() {
   const loadAnalytics = async () => {
     const { data } = await api.get("/analytics");
     setAnalytics(data);
+  };
+
+  const loadFlashcards = async () => {
+    try {
+      const { data } = await api.get("/chat/flashcards");
+      setFlashcards(data.flashcards || []);
+    } catch (error) {
+      setFlashcards([]);
+    }
+  };
+
+  const loadRecommendations = async () => {
+    try {
+      const { data } = await api.get("/analytics/recommendations");
+      setRecommendations(data.recommendations || []);
+    } catch (error) {
+      setRecommendations([]);
+    }
   };
 
   const loadInsights = async (sessionId) => {
@@ -365,7 +291,7 @@ export default function Dashboard() {
 
     setIsLoadingChat(true);
 
-    Promise.all([loadSessions(), loadAnalytics()])
+    Promise.all([loadSessions(), loadAnalytics(), loadFlashcards(), loadRecommendations()])
       .catch((error) => {
         setChatError(
           error.response?.data?.message || "Could not load your learning data."
@@ -434,7 +360,7 @@ export default function Dashboard() {
 
       setActiveSessionId(data.session._id);
       setActiveMessages(data.session.messages);
-      await loadSessions();
+      await Promise.all([loadSessions(), loadAnalytics(), loadFlashcards(), loadRecommendations()]);
     } catch (error) {
       setChatError(
         error.response?.data?.message ||
@@ -530,6 +456,23 @@ export default function Dashboard() {
                   <strong>{subject.value}%</strong>
                 </div>
               ))
+            )}
+          </div>
+
+          <div className="subject-performance-panel">
+            <h4>Recent topics</h4>
+            {recentTopics.length === 0 ? (
+              <p className="subject-performance-empty">
+                Start chatting and your recent topics will appear here.
+              </p>
+            ) : (
+              <div className="subject-list">
+                {recentTopics.map((topic) => (
+                  <span key={topic} className="subject-pill">
+                    {topic}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -709,22 +652,33 @@ export default function Dashboard() {
                 <h2>🧠 Learning insights</h2>
               </div>
               <div className="insights-grid">
-                <div className="insight-item">
-                  <span>Strongest Subject</span>
-                  <strong>{insights.strongest}</strong>
-                </div>
-                <div className="insight-item">
-                  <span>Needs More Practice</span>
-                  <strong>{insights.weakest}</strong>
-                </div>
-                <div className="insight-item">
-                  <span>Recent Topic</span>
-                  <strong>{insights.recent}</strong>
-                </div>
-                <div className="insight-item">
-                  <span>Recommended Next</span>
-                  <strong>{insights.next}</strong>
-                </div>
+                {recommendations.length > 0 ? (
+                  recommendations.slice(0, 4).map((item) => (
+                    <div className="insight-item" key={item._id}>
+                      <span>{item.title}</span>
+                      <strong>{item.description}</strong>
+                    </div>
+                  ))
+                ) : (
+                  <>
+                    <div className="insight-item">
+                      <span>Strongest Subject</span>
+                      <strong>{insights.strongest}</strong>
+                    </div>
+                    <div className="insight-item">
+                      <span>Needs More Practice</span>
+                      <strong>{insights.weakest}</strong>
+                    </div>
+                    <div className="insight-item">
+                      <span>Recent Topic</span>
+                      <strong>{insights.recent}</strong>
+                    </div>
+                    <div className="insight-item">
+                      <span>Recommended Next</span>
+                      <strong>{insights.next}</strong>
+                    </div>
+                  </>
+                )}
               </div>
             </article>
 
@@ -733,27 +687,33 @@ export default function Dashboard() {
                 <h2>AI Flashcards</h2>
               </div>
               <p className="flashcards-description">
-                Review quick AI-generated study cards for {activeSession?.subject || "your current subject"}.
+                Review study cards saved from your recent conversations with AIDify.
               </p>
 
               <div className="flashcard-grid">
-                {flashcards.map((card, index) => (
-                  <button
-                    type="button"
-                    className={`flashcard ${flippedCards[index] ? "flipped" : ""}`}
-                    key={`${card.question}-${index}`}
-                    onClick={() => toggleFlashcard(index)}
-                  >
-                    <div className="flashcard-inner">
-                      <div className="flashcard-face flashcard-front">
-                        <h3>{card.question}</h3>
+                {flashcards.length === 0 ? (
+                  <div className="chat-history-empty">
+                    Start a chat and AIDify will save flashcards here.
+                  </div>
+                ) : (
+                  flashcards.map((card, index) => (
+                    <button
+                      type="button"
+                      className={`flashcard ${flippedCards[index] ? "flipped" : ""}`}
+                      key={`${card._id || card.question}-${index}`}
+                      onClick={() => toggleFlashcard(index)}
+                    >
+                      <div className="flashcard-inner">
+                        <div className="flashcard-face flashcard-front">
+                          <h3>{card.question}</h3>
+                        </div>
+                        <div className="flashcard-face flashcard-back">
+                          <p>{card.answer}</p>
+                        </div>
                       </div>
-                      <div className="flashcard-face flashcard-back">
-                        <p>{card.answer}</p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  ))
+                )}
               </div>
             </article>
           </div>

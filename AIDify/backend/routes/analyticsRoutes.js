@@ -2,10 +2,46 @@ import express from "express";
 import axios from "axios";
 import Analytics from "../models/Analytics.js";
 import ChatSession from "../models/ChatSession.js";
+import Recommendation from "../models/Recommendation.js";
 import protect from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 const model = process.env.OPENROUTER_MODEL || "anthropic/claude-opus-4.8";
+
+const buildRecommendations = async (userId, analytics, recentSession) => {
+  const strongest = analytics.strongestSubject || "General";
+  const weakest = analytics.weakestSubject || "General";
+  const recentTopic = recentSession?.subject || strongest;
+
+  const nextRecommendations = [
+    {
+      title: "Strengthen your strongest topic",
+      description: `Keep practicing ${strongest} with one focused review session today.`,
+      subject: strongest,
+      priority: 1,
+    },
+    {
+      title: "Revisit a weaker area",
+      description: `Spend a few minutes on ${weakest} to build confidence before your next chat.`,
+      subject: weakest,
+      priority: 2,
+    },
+    {
+      title: "Follow up on your latest topic",
+      description: `Your recent session centered on ${recentTopic}; reviewing it will help you retain it.`,
+      subject: recentTopic,
+      priority: 3,
+    },
+  ];
+
+  await Recommendation.deleteMany({ user: userId });
+  return Recommendation.insertMany(
+    nextRecommendations.map((recommendation) => ({
+      ...recommendation,
+      user: userId,
+    }))
+  );
+};
 
 router.get("/", protect, async (req, res) => {
   try {
@@ -34,6 +70,27 @@ router.get("/", protect, async (req, res) => {
     res.status(500).json({
       message: error.message,
     });
+  }
+});
+
+router.get("/recommendations", protect, async (req, res) => {
+  try {
+    let analytics = await Analytics.findOne({ user: req.user._id });
+
+    if (!analytics) {
+      analytics = await Analytics.create({ user: req.user._id });
+    }
+
+    let recentSession = await ChatSession.findOne({ user: req.user._id }).sort({ updatedAt: -1 });
+    let recommendations = await Recommendation.find({ user: req.user._id }).sort({ priority: 1, createdAt: -1 });
+
+    if (recommendations.length === 0) {
+      recommendations = await buildRecommendations(req.user._id, analytics, recentSession);
+    }
+
+    res.json({ recommendations });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
@@ -131,7 +188,9 @@ ${analyticsSummary}\nSubject totals: ${subjectTotals}\n${sessionSummary}`;
       }
     });
 
-    res.json({ insights, raw: insightText });
+    const recommendations = await Recommendation.find({ user: req.user._id }).sort({ priority: 1, createdAt: -1 }).limit(4);
+
+    res.json({ insights, raw: insightText, recommendations });
   } catch (error) {
     res.status(500).json({
       message: error.response?.data || error.message,

@@ -3,6 +3,7 @@ import axios from "axios";
 import ChatSession from "../models/ChatSession.js";
 import protect from "../middleware/authMiddleware.js";
 import Analytics from "../models/Analytics.js";
+import Flashcard from "../models/Flashcard.js";
 
 const router = express.Router();
 
@@ -38,12 +39,32 @@ const getSubjectFromMessage = (message) => {
     return "Biology";
   }
 
-  if (text.includes("essay") || text.includes("writing")) {
+  if (text.includes("essay") || text.includes("writing") || text.includes("thesis")) {
     return "Writing";
   }
 
   if (text.includes("swahili") || text.includes("kiswahili") || text.includes("sheng")) {
     return "Languages";
+  }
+
+  if (text.includes("python") || text.includes("programming") || text.includes("coding") || text.includes("algorithm")) {
+    return "Python";
+  }
+
+  if (text.includes("sql") || text.includes("database") || text.includes("postgres") || text.includes("query")) {
+    return "SQL";
+  }
+
+  if (text.includes("linux") || text.includes("ubuntu") || text.includes("terminal") || text.includes("server")) {
+    return "Linux";
+  }
+
+  if (text.includes("data engineering") || text.includes("pipeline") || text.includes("etl") || text.includes("airflow")) {
+    return "Data Engineering";
+  }
+
+  if (text.includes("machine learning") || text.includes("neural network") || text.includes("ai") || text.includes("deep learning")) {
+    return "AI";
   }
 
   return "General";
@@ -77,6 +98,33 @@ Tutor behavior:
 - Do not claim to have completed actions outside the chat.
 `;
 
+const buildFlashcards = (message, assistantReply, subject) => {
+  const cleanMessage = message.trim().replace(/\s+/g, " ");
+  const cleanReply = assistantReply.trim().replace(/\s+/g, " ");
+  const topic = cleanMessage
+    .replace(/^(explain|teach me|what is|how does|why does|can you explain)\s+/i, "")
+    .replace(/\?$/i, "")
+    .trim();
+
+  const cards = [];
+
+  if (topic) {
+    cards.push({
+      question: `What is ${topic}?`,
+      answer: cleanReply.slice(0, 180) || `Review ${topic} with the tutor to build confidence.`,
+    });
+  }
+
+  if (subject && subject !== "General") {
+    cards.push({
+      question: `Why does ${subject} matter for your learning?`,
+      answer: `Keep practicing ${subject} with short, focused study sessions.`,
+    });
+  }
+
+  return cards.slice(0, 2);
+};
+
 router.get("/sessions", protect, async (req, res) => {
   const sessions = await ChatSession.find({ user: req.user._id })
     .sort({ updatedAt: -1 })
@@ -108,6 +156,14 @@ router.get("/sessions/:sessionId", protect, async (req, res) => {
   }
 
   res.json({ session });
+});
+
+router.get("/flashcards", protect, async (req, res) => {
+  const flashcards = await Flashcard.find({ user: req.user._id })
+    .sort({ createdAt: -1 })
+    .limit(8);
+
+  res.json({ flashcards });
 });
 
 router.post("/message", protect, async (req, res) => {
@@ -192,6 +248,20 @@ const assistantReply =
       role: "assistant",
       content: assistantReply,
     });
+
+    const flashcardsToSave = buildFlashcards(message, assistantReply, session.subject);
+
+    if (flashcardsToSave.length > 0) {
+      await Flashcard.insertMany(
+        flashcardsToSave.map((card) => ({
+          user: req.user._id,
+          session: session._id,
+          subject: session.subject,
+          question: card.question,
+          answer: card.answer,
+        }))
+      );
+    }
 
     let analytics = await Analytics.findOne({
       user: req.user._id,
