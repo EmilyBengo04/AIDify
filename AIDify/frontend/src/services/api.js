@@ -1,9 +1,9 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://aidify-p0cc.onrender.com/api";
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: `${API_URL}/api`,
 });
 
 api.interceptors.request.use((config) => {
